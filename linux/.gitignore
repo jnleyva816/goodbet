@@ -1,0 +1,54 @@
+# Flutter/Dart/Pub related
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+build/
+ios/Flutter/.last_build_id
+
+# Android related
+*.apk
+*.aar
+*.iml
+local.properties
+
+# iOS related
+DerivedData/
+*.xcworkspace
+*.xcuserdata/
+*.lock
+build/
+Pods/
+.podspec
+.framework/
+*.hmap
+
+# IntelliJ related
+.idea/
+*.iml
+*.ipr
+*.iws
+.idea/modules.xml
+.idea/*.iml
+.idea/workspace.xml
+.idea/libraries
+.idea/tasks.xml
+.idea/gradle.xml
+.idea/dictionaries
+.idea/vcs.xml
+
+# VS Code related
+.vscode/
+.history/
+
+# MacOS related
+.DS_Store
+
+# Windows related
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux related
+*.swp
