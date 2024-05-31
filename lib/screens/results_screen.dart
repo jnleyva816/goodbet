@@ -19,10 +19,19 @@ class ResultsScreen extends StatelessWidget {
     Map<String, int> roundsLost = {};
     double totalBets = bets.values.fold(0.0, (sum, bet) => sum + bet);
 
+    print('Scores: $scores');
+    print('Player Names: $playerNames');
+    print('Holes: $holes');
+    print('Bets: $bets');
+
     // Calculate rounds won and lost for each player
     for (int hole = 1; hole <= holes; hole++) {
-      int minScore = scores.values.map((scoresMap) => scoresMap[hole] ?? 0).reduce((a, b) => a < b ? a : b);
-      int maxScore = scores.values.map((scoresMap) => scoresMap[hole] ?? 0).reduce((a, b) => a > b ? a : b);
+      List<int> scoresForHole = scores.values.map((scoresMap) => scoresMap[hole] ?? 0).toList();
+
+      if (scoresForHole.isEmpty) continue;
+
+      int minScore = scoresForHole.reduce((a, b) => a < b ? a : b);
+      int maxScore = scoresForHole.reduce((a, b) => a > b ? a : b);
 
       scores.forEach((playerId, scoresMap) {
         if (scoresMap[hole] == minScore) {

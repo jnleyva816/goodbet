@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import '../models/user_model.dart';
 import '../widgets/bottom_nav_bar.dart';
 import 'history_screen.dart';
@@ -9,6 +10,8 @@ import 'notifications_screen.dart';
 import 'more_screen.dart';
 import 'scorecard_screen.dart';
 import 'dart:math';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 class HomeScreen extends StatefulWidget {
   @override
@@ -18,6 +21,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
   UserModel? _currentUser;
+  FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
 
   final List<Widget> _pages = [];
 
@@ -25,6 +29,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _getUserData();
+    _setupFCM();
     _pages.addAll([
       HomeContent(
         currentUser: _currentUser,
@@ -58,22 +63,43 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _setupFCM() {
+    _firebaseMessaging.requestPermission();
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      // Handle foreground notifications
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message.notification?.body ?? 'Notification received')),
+      );
+    });
+  }
+
   void _showJoinRoundDialog() {
     String accessCode = '';
+    double betAmount = 0.0;
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Join Round'),
-        content: TextField(
-          onChanged: (value) => accessCode = value,
-          decoration: InputDecoration(labelText: 'Enter Access Code'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              onChanged: (value) => accessCode = value,
+              decoration: InputDecoration(labelText: 'Enter Access Code'),
+            ),
+            TextField(
+              keyboardType: TextInputType.number,
+              onChanged: (value) => betAmount = double.tryParse(value) ?? 0.0,
+              decoration: InputDecoration(labelText: 'Enter Bet Amount'),
+            ),
+          ],
         ),
         actions: [
           TextButton(
             onPressed: () {
               Navigator.of(context).pop();
-              _joinRound(accessCode);
+              _joinRound(accessCode, betAmount);
             },
             child: Text('Next'),
           ),
@@ -82,7 +108,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _joinRound(String accessCode) async {
+  void _joinRound(String accessCode, double betAmount) async {
     try {
       final roundQuery = await FirebaseFirestore.instance
           .collection('rounds')
@@ -91,16 +117,33 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (roundQuery.docs.isNotEmpty) {
         final roundDoc = roundQuery.docs.first;
-        final roundData = roundDoc.data();
-        final List<dynamic> players = roundData['players'];
-        final Map<String, dynamic> playerBets = Map<String, dynamic>.from(roundData['bets'] ?? {});
+        final roundId = roundDoc.id;
 
-        for (var playerId in players) {
-          DocumentSnapshot playerDoc = await FirebaseFirestore.instance.collection('users').doc(playerId).get();
-          playerBets[playerId] = playerDoc['betAmount'] ?? 0.0;
+        // Ensure user has not already joined this round
+        final userId = FirebaseAuth.instance.currentUser!.uid;
+        final roundData = roundDoc.data() as Map<String, dynamic>;
+        final List<dynamic> players = roundData['players'];
+        if (players.contains(userId)) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('You have already joined this round'),
+          ));
+          return;
         }
 
-        _showBetAmountDialog(accessCode, roundDoc.id, playerBets);
+        await FirebaseFirestore.instance.collection('rounds').doc(roundId).update({
+          'players': FieldValue.arrayUnion([userId]),
+          'bets.$userId': betAmount,
+          'totalBets': FieldValue.increment(betAmount),
+        });
+
+        _sendFCMNotification(roundId, userId);
+
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ScorecardScreen(roundId: roundId, accessCode: accessCode),
+          ),
+        );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('Invalid access code'),
@@ -113,65 +156,45 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _showBetAmountDialog(String accessCode, String roundId, Map<String, dynamic> playerBets) {
-    double betAmount = 0.0;
+  void _sendFCMNotification(String roundId, String userId) async {
+    final roundDoc = await FirebaseFirestore.instance.collection('rounds').doc(roundId).get();
+    final List<dynamic> players = roundDoc['players'];
 
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Enter Bet Amount'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Other players bets:'),
-            for (var player in playerBets.entries)
-              Text('${player.key}: \$${player.value.toStringAsFixed(2)}'),
-            TextField(
-              keyboardType: TextInputType.number,
-              onChanged: (value) {
-                betAmount = double.tryParse(value) ?? 0.0;
-              },
-              decoration: InputDecoration(labelText: 'Your Bet Amount'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              _finalizeJoinRound(roundId, accessCode, betAmount);
-            },
-            child: Text('Join'),
-          ),
-        ],
-      ),
-    );
+    for (var playerId in players) {
+      if (playerId != userId) {
+        final userDoc = await FirebaseFirestore.instance.collection('users').doc(playerId).get();
+        final fcmToken = userDoc['fcmToken'];
+        if (fcmToken != null) {
+          _sendNotification(fcmToken, 'New Player Joined', 'A new player has joined the round.');
+        }
+      }
+    }
   }
 
-  void _finalizeJoinRound(String roundId, String accessCode, double betAmount) async {
-    try {
-      if (_currentUser != null) {
-        await FirebaseFirestore.instance.collection('rounds').doc(roundId).update({
-          'players': FieldValue.arrayUnion([_currentUser!.uid]),
-          'bets.${_currentUser!.uid}': betAmount,
-          'totalBets': FieldValue.increment(betAmount),
-        });
+  Future<void> _sendNotification(String token, String title, String body) async {
+    const String serverKey = 'YOUR_SERVER_KEY_HERE'; // Replace with your FCM server key
 
-        await FirebaseFirestore.instance.collection('users').doc(_currentUser!.uid).update({
-          'betAmount': betAmount,
-        });
+    final headers = {
+      'Content-Type': 'application/json',
+      'Authorization': 'key=$serverKey',
+    };
 
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ScorecardScreen(roundId: roundId, accessCode: accessCode),
-          ),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Error: $e'),
-      ));
+    final payload = {
+      'to': token,
+      'notification': {
+        'title': title,
+        'body': body,
+      },
+    };
+
+    final response = await http.post(
+      Uri.parse('https://fcm.googleapis.com/fcm/send'),
+      headers: headers,
+      body: jsonEncode(payload),
+    );
+
+    if (response.statusCode != 200) {
+      print('Error sending notification: ${response.body}');
     }
   }
 
@@ -220,12 +243,14 @@ class _HomeScreenState extends State<HomeScreen> {
   void _createRound(int holes, double betAmount, String accessCode) async {
     final roundId = FirebaseFirestore.instance.collection('rounds').doc().id;
 
+    final userId = FirebaseAuth.instance.currentUser!.uid;
+
     await FirebaseFirestore.instance.collection('rounds').doc(roundId).set({
-      'leader': _currentUser!.uid,
+      'leader': userId,
       'holes': holes,
       'accessCode': accessCode,
-      'players': [_currentUser!.uid],
-      'bets': {_currentUser!.uid: betAmount},
+      'players': [userId],
+      'bets': {userId: betAmount},
       'scores': {},
       'totalBets': betAmount,
       'date': DateTime.now().toIso8601String(), // Adding the date
@@ -254,22 +279,22 @@ class _HomeScreenState extends State<HomeScreen> {
             child: _currentUser == null
                 ? Center(child: CircularProgressIndicator())
                 : Column(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: CircleAvatar(
-                          radius: 30,
-                          backgroundImage: _currentUser!.profileImageUrl.isNotEmpty
-                              ? CachedNetworkImageProvider(_currentUser!.profileImageUrl)
-                              : null,
-                          child: _currentUser!.profileImageUrl.isEmpty ? Icon(Icons.person, size: 30) : null,
-                        ),
-                      ),
-                      Expanded(
-                        child: _pages[_selectedIndex],
-                      ),
-                    ],
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: CircleAvatar(
+                    radius: 30,
+                    backgroundImage: _currentUser!.profileImageUrl.isNotEmpty
+                        ? CachedNetworkImageProvider(_currentUser!.profileImageUrl)
+                        : null,
+                    child: _currentUser!.profileImageUrl.isEmpty ? Icon(Icons.person, size: 30) : null,
                   ),
+                ),
+                Expanded(
+                  child: _pages[_selectedIndex],
+                ),
+              ],
+            ),
           ),
         ],
       ),

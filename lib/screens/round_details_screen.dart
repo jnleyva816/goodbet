@@ -31,8 +31,8 @@ class RoundDetailsScreen extends StatelessWidget {
           var data = snapshot.data!.data() as Map<String, dynamic>;
           String dateString = data['date'];
           String formattedDateTime = _formatDateTime(dateString);
-          Map<String, dynamic> scores = data['scores'] ?? {};
           double totalBets = data['totalBets']?.toDouble() ?? 0.0;
+          Map<String, dynamic> scores = data['scores'] ?? {};
 
           return Padding(
             padding: const EdgeInsets.all(8.0),
@@ -55,19 +55,28 @@ class RoundDetailsScreen extends StatelessWidget {
                 ),
                 Expanded(
                   child: ListView(
-                    children: scores.entries.map((entry) {
-                      String playerId = entry.key;
+                    children: scores.entries.map<Widget>((entry) {
+                      String userId = entry.key;
                       Map<int, int> playerScores = entry.value.cast<int, int>();
-                      return ListTile(
-                        title: Text(_getPlayerName(playerId)),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: playerScores.entries.map((scoreEntry) {
-                            int hole = scoreEntry.key;
-                            int score = scoreEntry.value;
-                            return Text('Hole $hole: $score');
-                          }).toList(),
-                        ),
+                      int totalScore = _calculateTotalScore(playerScores);
+                      return FutureBuilder(
+                        future: _getPlayerName(userId),
+                        builder: (context, AsyncSnapshot<String> playerNameSnapshot) {
+                          if (playerNameSnapshot.connectionState == ConnectionState.waiting) {
+                            return CircularProgressIndicator();
+                          }
+                          if (playerNameSnapshot.hasError) {
+                            return Text("Error retrieving player name");
+                          }
+                          if (!playerNameSnapshot.hasData) {
+                            return Text("Player name not found");
+                          }
+                          String playerName = playerNameSnapshot.data!;
+                          return ListTile(
+                            title: Text(playerName),
+                            subtitle: Text('Total Score: $totalScore'),
+                          );
+                        },
                       );
                     }).toList(),
                   ),
@@ -80,17 +89,23 @@ class RoundDetailsScreen extends StatelessWidget {
     );
   }
 
+  Future<String> _getPlayerName(String userId) async {
+    DocumentSnapshot userSnapshot = await FirebaseFirestore.instance.collection('users').doc(userId).get();
+    return userSnapshot.exists ? userSnapshot['name'] : 'Unknown'; // Replace 'name' with the field name in your user document that stores the user's name
+  }
+
+  int _calculateTotalScore(Map<int, int> playerScores) {
+    int totalScore = 0;
+    playerScores.values.forEach((score) {
+      totalScore += score;
+    });
+    return totalScore;
+  }
+
   String _formatDateTime(String dateString) {
     DateTime dateTime = DateTime.parse(dateString);
     String formattedDate = DateFormat('MM-dd-yyyy').format(dateTime); // Format date
     String formattedTime = DateFormat('hh:mm:ss a').format(dateTime); // Format time in 12-hour format
     return '$formattedDate - $formattedTime';
-  }
-
-  String _getPlayerName(String playerId) {
-    // You can implement a function to retrieve the user name from Firestore based on the player ID
-    // For example, if you have a 'users' collection with user information
-    // Here, we assume that the user name is directly stored in Firestore under the 'playerNames' collection
-    return 'Player Name'; // Replace this with the actual implementation to get the player name
   }
 }
