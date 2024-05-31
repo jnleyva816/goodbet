@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
- // Import Google Fonts
-import 'package:cached_network_image/cached_network_image.dart'; // Import CachedNetworkImage
+import 'package:cached_network_image/cached_network_image.dart';
 import '../models/user_model.dart';
 import '../widgets/bottom_nav_bar.dart';
 import 'history_screen.dart';
@@ -229,6 +228,7 @@ class _HomeScreenState extends State<HomeScreen> {
       'bets': {_currentUser!.uid: betAmount},
       'scores': {},
       'totalBets': betAmount,
+      'date': DateTime.now().toIso8601String(), // Adding the date
     });
 
     Navigator.push(
@@ -244,14 +244,12 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       body: Stack(
         children: [
-          // Background image
           Positioned.fill(
             child: Image.asset(
-              'assets/images/background.jpg', // Your background image
+              'assets/images/background.jpg',
               fit: BoxFit.cover,
             ),
           ),
-          // Content
           SafeArea(
             child: _currentUser == null
                 ? Center(child: CircularProgressIndicator())
