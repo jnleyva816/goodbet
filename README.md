@@ -1,16 +1,34 @@
-# goodbet
+# Good Bet
 
-A new Flutter project.
+Good Bet is a golf betting app that allows friends to join a round via code, bet on each hole, and agree on outcomes to distribute winnings. The app is developed using Flutter and integrates with Firebase and MongoDB.
 
-## Getting Started
+## Table of Contents
 
-This project is a starting point for a Flutter application.
+- [Features](#features)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Running the App](#running-the-app)
+- [Contributing](#contributing)
+- [License](#license)
 
-A few resources to get you started if this is your first Flutter project:
+## Features
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+- Create and join golf rounds using a code
+- Bet on each hole and agree on outcomes
+- Distribute winnings based on outcomes
+- Modern and intuitive UI
+- Integration with Firebase for authentication and data storage
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Requirements
+
+- Flutter SDK
+- Firebase project setup
+- MongoDB setup
+
+## Installation
+
+1. **Clone the repository:**
+   ```sh
+   git clone https://github.com/jnleyva816/goodbet.git
+   cd goodbet
