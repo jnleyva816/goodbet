@@ -1,0 +1,33 @@
+name: Build iOS App
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '2.2.3'  # Specify the Flutter version you need
+
+      - name: Install CocoaPods dependencies
+        run: |
+          cd ios
+          pod install
+        working-directory: ios
+
+      - name: Build iOS
+        run: flutter build ios --release --no-codesign
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: ios-build
+          path: build/ios/iphoneos/Runner.app
