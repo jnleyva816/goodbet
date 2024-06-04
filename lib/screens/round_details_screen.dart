@@ -5,27 +5,27 @@ import 'package:intl/intl.dart';
 class RoundDetailsScreen extends StatelessWidget {
   final String roundId;
 
-  RoundDetailsScreen({required this.roundId});
+  const RoundDetailsScreen({super.key, required this.roundId});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Round Details'),
+        title: const Text('Round Details'),
       ),
       body: StreamBuilder(
         stream: FirebaseFirestore.instance.collection('rounds').doc(roundId).snapshots(),
         builder: (context, AsyncSnapshot<DocumentSnapshot> snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(child: CircularProgressIndicator());
+            return const Center(child: CircularProgressIndicator());
           }
 
           if (snapshot.hasError) {
-            return Center(child: Text("Error fetching data"));
+            return const Center(child: Text("Error fetching data"));
           }
 
           if (!snapshot.hasData || !snapshot.data!.exists) {
-            return Center(child: Text("Round not found"));
+            return const Center(child: Text("Round not found"));
           }
 
           var data = snapshot.data!.data() as Map<String, dynamic>;
@@ -41,15 +41,15 @@ class RoundDetailsScreen extends StatelessWidget {
               children: [
                 Text(
                   'Date: $formattedDateTime',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
-                SizedBox(height: 10),
+                const SizedBox(height: 10),
                 Text(
                   'Total Bets: \$${totalBets.toStringAsFixed(2)}',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
-                SizedBox(height: 20),
-                Text(
+                const SizedBox(height: 20),
+                const Text(
                   'Scores:',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
@@ -63,13 +63,13 @@ class RoundDetailsScreen extends StatelessWidget {
                         future: _getPlayerName(userId),
                         builder: (context, AsyncSnapshot<String> playerNameSnapshot) {
                           if (playerNameSnapshot.connectionState == ConnectionState.waiting) {
-                            return CircularProgressIndicator();
+                            return const CircularProgressIndicator();
                           }
                           if (playerNameSnapshot.hasError) {
-                            return Text("Error retrieving player name");
+                            return const Text("Error retrieving player name");
                           }
                           if (!playerNameSnapshot.hasData) {
-                            return Text("Player name not found");
+                            return const Text("Player name not found");
                           }
                           String playerName = playerNameSnapshot.data!;
                           return ListTile(
@@ -96,9 +96,9 @@ class RoundDetailsScreen extends StatelessWidget {
 
   int _calculateTotalScore(Map<int, int> playerScores) {
     int totalScore = 0;
-    playerScores.values.forEach((score) {
+    for (var score in playerScores.values) {
       totalScore += score;
-    });
+    }
     return totalScore;
   }
 

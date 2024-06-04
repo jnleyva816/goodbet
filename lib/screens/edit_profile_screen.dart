@@ -9,7 +9,7 @@ import 'dart:io';
 class EditProfileScreen extends StatefulWidget {
   final UserModel user;
 
-  EditProfileScreen({required this.user});
+  const EditProfileScreen({super.key, required this.user});
 
   @override
   _EditProfileScreenState createState() => _EditProfileScreenState();
@@ -47,7 +47,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             initAspectRatio: CropAspectRatioPreset.original,
             lockAspectRatio: true,
           ),
-          iosUiSettings: IOSUiSettings(
+          iosUiSettings: const IOSUiSettings(
             minimumAspectRatio: 1.0,
           ),
         );
@@ -82,20 +82,29 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       handicap: int.parse(_handicapController.text),
       funds: widget.user.funds,
       profileImageUrl: imageUrl,
+      email: widget.user.email, // Make sure to pass the email field
     );
-    await _firestore.collection('users').doc(updatedUser.uid).update(updatedUser.toMap());
-    Navigator.pop(context, updatedUser); // Return the updated user
+
+    try {
+      await _firestore.collection('users').doc(updatedUser.uid).update(updatedUser.toMap());
+      Navigator.pop(context, updatedUser); // Return the updated user
+    } catch (e) {
+      print('Error updating user: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to update profile. Please try again.')),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Edit Profile'),
+        title: const Text('Edit Profile'),
         backgroundColor: Theme.of(context).primaryColor,
       ),
       body: Padding(
-        padding: EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
             GestureDetector(
@@ -106,31 +115,31 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     ? FileImage(_profileImage!)
                     : NetworkImage(widget.user.profileImageUrl) as ImageProvider,
                 child: _profileImage == null
-                    ? Icon(Icons.camera_alt, size: 50, color: Colors.white)
+                    ? const Icon(Icons.camera_alt, size: 50, color: Colors.white)
                     : null,
               ),
             ),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             TextField(
               controller: _firstNameController,
-              decoration: InputDecoration(labelText: 'First Name'),
+              decoration: const InputDecoration(labelText: 'First Name'),
             ),
             TextField(
               controller: _lastNameController,
-              decoration: InputDecoration(labelText: 'Last Name'),
+              decoration: const InputDecoration(labelText: 'Last Name'),
             ),
             TextField(
               controller: _handicapController,
-              decoration: InputDecoration(labelText: 'Handicap'),
+              decoration: const InputDecoration(labelText: 'Handicap'),
               keyboardType: TextInputType.number,
             ),
-            SizedBox(height: 20),
+            const SizedBox(height: 20),
             ElevatedButton(
               onPressed: _updateUser,
-              child: Text('Save Changes'),
               style: ElevatedButton.styleFrom(
-                foregroundColor: Theme.of(context).colorScheme.background, backgroundColor: Theme.of(context).colorScheme.primary,
+                foregroundColor: Theme.of(context).colorScheme.surface, backgroundColor: Theme.of(context).colorScheme.primary,
               ),
+              child: const Text('Save Changes'),
             ),
           ],
         ),

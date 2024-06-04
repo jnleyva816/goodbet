@@ -17,16 +17,18 @@ void main() async {
 
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-  runApp(MyApp());
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Good Bet',
       theme: ThemeData(
-        primaryColor: Color(0xFF1B5E20), // Dark green
+        primaryColor: const Color(0xFF1B5E20), // Dark green
         colorScheme: const ColorScheme.light(
           primary: Color(0xFF1B5E20), // Dark green
           secondary: Color(0xFF81C784), // Light green
@@ -52,11 +54,11 @@ class MyApp extends StatelessWidget {
           ),
         ),
       ),
-      home: LoginScreen(),
+      home: const LoginScreen(),
       routes: {
-        '/login': (context) => LoginScreen(),
-        '/register': (context) => RegisterScreen(),
-        '/home': (context) => HomeScreen(),
+        '/login': (context) => const LoginScreen(),
+        '/register': (context) => const RegisterScreen(),
+        '/home': (context) => const HomeScreen(),
       },
     );
   }

@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "551918089816",
+    "project_id": "goodbet-5e52d",
+    "storage_bucket": "goodbet-5e52d.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:551918089816:android:048f6d307577ca4784fc2d",
+        "android_client_info": {
+          "package_name": "com.example.goodbet"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "551918089816-gv6jojo4e1jsbc0g1k4c53tl0e4ogt2p.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAdyGgQI9tqbBjyuzEcbCQj5NJNlB_dH_c"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "551918089816-gv6jojo4e1jsbc0g1k4c53tl0e4ogt2p.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "551918089816-t6kjsp3vmdiegdl05rb7nq4eo2c33l7d.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.goodbet"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -6,7 +6,7 @@ class ResultsScreen extends StatelessWidget {
   final int holes;
   final Map<String, double> bets;
 
-  ResultsScreen({
+  const ResultsScreen({super.key, 
     required this.scores,
     required this.playerNames,
     required this.holes,
@@ -15,73 +15,150 @@ class ResultsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Map<String, int> roundsWon = {};
-    Map<String, int> roundsLost = {};
-    double totalBets = bets.values.fold(0.0, (sum, bet) => sum + bet);
-
-    print('Scores: $scores');
-    print('Player Names: $playerNames');
-    print('Holes: $holes');
-    print('Bets: $bets');
-
-    // Calculate rounds won and lost for each player
-    for (int hole = 1; hole <= holes; hole++) {
-      List<int> scoresForHole = scores.values.map((scoresMap) => scoresMap[hole] ?? 0).toList();
-
-      if (scoresForHole.isEmpty) continue;
-
-      int minScore = scoresForHole.reduce((a, b) => a < b ? a : b);
-      int maxScore = scoresForHole.reduce((a, b) => a > b ? a : b);
-
-      scores.forEach((playerId, scoresMap) {
-        if (scoresMap[hole] == minScore) {
-          roundsWon[playerId] = (roundsWon[playerId] ?? 0) + 1;
-        }
-        if (scoresMap[hole] == maxScore) {
-          roundsLost[playerId] = (roundsLost[playerId] ?? 0) + 1;
-        }
-      });
-    }
-
-    // Calculate total bets and distribute to the winner(s)
-    void distributeBets() {
-      // Implement logic to calculate total bets and distribute to the winner(s)
-      // For example, distribute equally if there are multiple winners
-    }
+    String winnerId = _calculateWinner();
+    String winnerName = playerNames[winnerId] ?? 'Unknown';
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Game Results'),
+        title: const Text('Results'),
         backgroundColor: Theme.of(context).primaryColor,
       ),
       body: Padding(
         padding: const EdgeInsets.all(8.0),
-        child: Column(
-          children: [
-            Expanded(
-              child: ListView(
-                children: scores.keys.map((playerId) {
-                  return ListTile(
-                    title: Text(playerNames[playerId] ?? playerId),
-                    subtitle: Text(
-                      'Rounds Won: ${roundsWon[playerId] ?? 0}, Rounds Lost: ${roundsLost[playerId] ?? 0}, Bet: \$${bets[playerId]?.toStringAsFixed(2) ?? '0.00'}',
-                    ),
-                  );
+        child: SingleChildScrollView(
+          child: Column(
+            children: [
+              const Text(
+                'Scores',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              ),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: DataTable(
+                  columns: [
+                    const DataColumn(label: Text('Player')),
+                    for (int hole = 1; hole <= holes; hole++) DataColumn(label: Text('Hole $hole')),
+                    const DataColumn(label: Text('Total')),
+                  ],
+                  rows: scores.entries.map((entry) {
+                    String playerId = entry.key;
+                    Map<int, int> playerScores = entry.value;
+                    int totalScore = playerScores.values.fold(0, (a, b) => a + b);
+                    return DataRow(cells: [
+                      DataCell(Text(playerNames[playerId] ?? playerId)),
+                      for (int hole = 1; hole <= holes; hole++)
+                        DataCell(Text(playerScores[hole]?.toString() ?? '-')),
+                      DataCell(Text(totalScore.toString())),
+                    ]);
+                  }).toList(),
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'Bets',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              ),
+              DataTable(
+                columns: const [
+                  DataColumn(label: Text('Player')),
+                  DataColumn(label: Text('Bet Amount')),
+                ],
+                rows: bets.entries.map((entry) {
+                  String playerId = entry.key;
+                  double betAmount = entry.value;
+                  return DataRow(cells: [
+                    DataCell(Text(playerNames[playerId] ?? playerId)),
+                    DataCell(Text('\$${betAmount.toStringAsFixed(2)}')),
+                  ]);
                 }).toList(),
               ),
-            ),
-            Text(
-              'Total Bets: \$${totalBets.toStringAsFixed(2)}',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 10),
-            ElevatedButton(
-              onPressed: distributeBets,
-              child: Text('Distribute Bets'),
-            ),
-          ],
+              const SizedBox(height: 20),
+              Text(
+                'Total Bets: \$${bets.values.fold(0.0, (a, b) => a + b).toStringAsFixed(2)}',
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Winner: $winnerName',
+                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.green),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: () => _distributeBets(context, winnerId),
+                style: ElevatedButton.styleFrom(
+                  foregroundColor: Colors.white, backgroundColor: Theme.of(context).primaryColor,
+                ),
+                child: const Text('Distribute Bets'),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'Players',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              ),
+              ..._buildPlayerDetails(context),
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  String _calculateWinner() {
+    Map<String, int> totalScores = {};
+
+    scores.forEach((playerId, playerScores) {
+      totalScores[playerId] = playerScores.values.fold(0, (a, b) => a + b);
+    });
+
+    String winnerId = totalScores.entries.reduce((a, b) => a.value < b.value ? a : b).key;
+    return winnerId;
+  }
+
+  void _distributeBets(BuildContext context, String winnerId) {
+    double totalBets = bets.values.fold(0.0, (a, b) => a + b);
+    String winnerName = playerNames[winnerId] ?? 'Unknown';
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Distribute Bets'),
+        content: Text('$winnerName wins the total bets of \$${totalBets.toStringAsFixed(2)}!'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildPlayerDetails(BuildContext context) {
+    return playerNames.entries.map((entry) {
+      String playerId = entry.key;
+      String playerName = entry.value;
+      int totalScore = scores[playerId]?.values.fold(0, (a, b) => a! + b) ?? 0;
+      double betAmount = bets[playerId] ?? 0.0;
+
+      return Card(
+        margin: const EdgeInsets.symmetric(vertical: 10.0, horizontal: 5.0),
+        child: ListTile(
+          leading: CircleAvatar(
+            backgroundColor: Theme.of(context).primaryColor,
+            child: Text(playerName[0]),
+          ),
+          title: Text(playerName),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Total Score: $totalScore'),
+              Text('Bet Amount: \$${betAmount.toStringAsFixed(2)}'),
+            ],
+          ),
+        ),
+      );
+    }).toList();
   }
 }

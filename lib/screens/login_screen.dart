@@ -4,6 +4,8 @@ import '../services/user_service.dart';
 import '../models/user_model.dart';
 
 class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
+
   @override
   _LoginScreenState createState() => _LoginScreenState();
 }
@@ -30,11 +32,11 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Login'),
+        title: const Text('Login'),
         backgroundColor: Theme.of(context).primaryColor,
       ),
       body: Padding(
-        padding: EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
             TextField(
@@ -43,7 +45,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   email = value;
                 });
               },
-              decoration: InputDecoration(labelText: 'Email'),
+              decoration: const InputDecoration(labelText: 'Email'),
             ),
             TextField(
               obscureText: true,
@@ -52,24 +54,24 @@ class _LoginScreenState extends State<LoginScreen> {
                   password = value;
                 });
               },
-              decoration: InputDecoration(labelText: 'Password'),
+              decoration: const InputDecoration(labelText: 'Password'),
             ),
-            SizedBox(height: 20),
+            const SizedBox(height: 20),
             ElevatedButton(
               onPressed: login,
-              child: Text('Login'),
               style: ElevatedButton.styleFrom(
-                foregroundColor: Theme.of(context).colorScheme.background, backgroundColor: Theme.of(context).colorScheme.primary,
+                foregroundColor: Theme.of(context).colorScheme.surface, backgroundColor: Theme.of(context).colorScheme.primary,
               ),
+              child: const Text('Login'),
             ),
             TextButton(
               onPressed: () {
                 Navigator.pushNamed(context, '/register');
               },
-              child: Text('Don\'t have an account? Register'),
               style: TextButton.styleFrom(
                 foregroundColor: Theme.of(context).colorScheme.secondary,
               ),
+              child: const Text('Don\'t have an account? Register'),
             ),
           ],
         ),

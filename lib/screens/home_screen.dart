@@ -14,6 +14,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+
   @override
   _HomeScreenState createState() => _HomeScreenState();
 }
@@ -21,7 +23,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
   UserModel? _currentUser;
-  FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
+  final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
 
   final List<Widget> _pages = [];
 
@@ -30,16 +32,6 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _getUserData();
     _setupFCM();
-    _pages.addAll([
-      HomeContent(
-        currentUser: _currentUser,
-        onJoinRound: _showJoinRoundDialog,
-        onCreateRound: _showHoleSelectionDialog,
-      ),
-      HistoryScreen(),
-      NotificationsScreen(),
-      MoreScreen(),
-    ]);
   }
 
   void _onItemTapped(int index) {
@@ -54,13 +46,24 @@ class _HomeScreenState extends State<HomeScreen> {
       DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
       setState(() {
         _currentUser = UserModel.fromMap(userDoc.data() as Map<String, dynamic>);
-        _pages[0] = HomeContent(
-          currentUser: _currentUser,
-          onJoinRound: _showJoinRoundDialog,
-          onCreateRound: _showHoleSelectionDialog,
-        );
+        _initializePages();
       });
     }
+  }
+
+  void _initializePages() {
+    _pages.clear();
+    _pages.addAll([
+      HomeContent(
+        currentUser: _currentUser,
+        onJoinRound: _showJoinRoundChoiceDialog,
+        onCreateRound: _showHoleSelectionDialog,
+      ),
+      const HistoryScreen(),
+      const NotificationsScreen(),
+      const MoreScreen(),
+    ]);
+    setState(() {});
   }
 
   void _setupFCM() {
@@ -73,6 +76,58 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  void _showJoinRoundChoiceDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Join Round'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              title: const Text('Rejoin Existing Session'),
+              onTap: () {
+                Navigator.of(context).pop();
+                _showRejoinRoundDialog();
+              },
+            ),
+            ListTile(
+              title: const Text('Join New Session'),
+              onTap: () {
+                Navigator.of(context).pop();
+                _showJoinRoundDialog();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showRejoinRoundDialog() {
+    String accessCode = '';
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Rejoin Round'),
+        content: TextField(
+          onChanged: (value) => accessCode = value,
+          decoration: const InputDecoration(labelText: 'Enter Access Code'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _joinRound(accessCode, rejoin: true);
+            },
+            child: const Text('Next'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showJoinRoundDialog() {
     String accessCode = '';
     double betAmount = 0.0;
@@ -80,18 +135,18 @@ class _HomeScreenState extends State<HomeScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Join Round'),
+        title: const Text('Join Round'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               onChanged: (value) => accessCode = value,
-              decoration: InputDecoration(labelText: 'Enter Access Code'),
+              decoration: const InputDecoration(labelText: 'Enter Access Code'),
             ),
             TextField(
               keyboardType: TextInputType.number,
               onChanged: (value) => betAmount = double.tryParse(value) ?? 0.0,
-              decoration: InputDecoration(labelText: 'Enter Bet Amount'),
+              decoration: const InputDecoration(labelText: 'Enter Bet Amount'),
             ),
           ],
         ),
@@ -99,16 +154,16 @@ class _HomeScreenState extends State<HomeScreen> {
           TextButton(
             onPressed: () {
               Navigator.of(context).pop();
-              _joinRound(accessCode, betAmount);
+              _joinRound(accessCode, betAmount: betAmount);
             },
-            child: Text('Next'),
+            child: const Text('Next'),
           ),
         ],
       ),
     );
   }
 
-  void _joinRound(String accessCode, double betAmount) async {
+  void _joinRound(String accessCode, {double betAmount = 0.0, bool rejoin = false}) async {
     try {
       final roundQuery = await FirebaseFirestore.instance
           .collection('rounds')
@@ -119,14 +174,17 @@ class _HomeScreenState extends State<HomeScreen> {
         final roundDoc = roundQuery.docs.first;
         final roundId = roundDoc.id;
 
-        // Ensure user has not already joined this round
         final userId = FirebaseAuth.instance.currentUser!.uid;
-        final roundData = roundDoc.data() as Map<String, dynamic>;
+        final roundData = roundDoc.data();
         final List<dynamic> players = roundData['players'];
+
         if (players.contains(userId)) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('You have already joined this round'),
-          ));
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ScorecardScreen(roundId: roundId, accessCode: accessCode),
+            ),
+          );
           return;
         }
 
@@ -145,7 +203,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Invalid access code'),
         ));
       }
@@ -277,7 +335,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           SafeArea(
             child: _currentUser == null
-                ? Center(child: CircularProgressIndicator())
+                ? const Center(child: CircularProgressIndicator())
                 : Column(
               children: [
                 Padding(
@@ -287,11 +345,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     backgroundImage: _currentUser!.profileImageUrl.isNotEmpty
                         ? CachedNetworkImageProvider(_currentUser!.profileImageUrl)
                         : null,
-                    child: _currentUser!.profileImageUrl.isEmpty ? Icon(Icons.person, size: 30) : null,
+                    child: _currentUser!.profileImageUrl.isEmpty ? const Icon(Icons.person, size: 30) : null,
                   ),
                 ),
                 Expanded(
-                  child: _pages[_selectedIndex],
+                  child: _pages.isNotEmpty ? _pages[_selectedIndex] : const Center(child: CircularProgressIndicator()),
                 ),
               ],
             ),
@@ -308,7 +366,7 @@ class HomeContent extends StatelessWidget {
   final VoidCallback onJoinRound;
   final VoidCallback onCreateRound;
 
-  HomeContent({required this.currentUser, required this.onJoinRound, required this.onCreateRound});
+  const HomeContent({super.key, required this.currentUser, required this.onJoinRound, required this.onCreateRound});
 
   @override
   Widget build(BuildContext context) {
@@ -318,26 +376,26 @@ class HomeContent extends StatelessWidget {
         children: [
           ElevatedButton(
             onPressed: onCreateRound,
-            child: Text('Create Round'),
             style: ElevatedButton.styleFrom(
-              textStyle: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
-              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(30.0),
               ),
             ),
+            child: const Text('Create Round'),
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
           ElevatedButton(
             onPressed: onJoinRound,
-            child: Text('Join Round'),
             style: ElevatedButton.styleFrom(
-              textStyle: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
-              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(30.0),
               ),
             ),
+            child: const Text('Join Round'),
           ),
         ],
       ),
@@ -348,39 +406,39 @@ class HomeContent extends StatelessWidget {
 class HoleSelectionDialog extends StatelessWidget {
   final Function(int) onNext;
 
-  HoleSelectionDialog({required this.onNext});
+  const HoleSelectionDialog({super.key, required this.onNext});
 
   @override
   Widget build(BuildContext context) {
-    int? _selectedHoles;
+    int? selectedHoles;
 
     return StatefulBuilder(
       builder: (context, setState) {
         return AlertDialog(
-          title: Text('How many holes?'),
+          title: const Text('How many holes?'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                title: Text('9 Holes'),
+                title: const Text('9 Holes'),
                 leading: Radio(
                   value: 9,
-                  groupValue: _selectedHoles,
+                  groupValue: selectedHoles,
                   onChanged: (value) {
                     setState(() {
-                      _selectedHoles = value as int?;
+                      selectedHoles = value;
                     });
                   },
                 ),
               ),
               ListTile(
-                title: Text('18 Holes'),
+                title: const Text('18 Holes'),
                 leading: Radio(
                   value: 18,
-                  groupValue: _selectedHoles,
+                  groupValue: selectedHoles,
                   onChanged: (value) {
                     setState(() {
-                      _selectedHoles = value as int?;
+                      selectedHoles = value;
                     });
                   },
                 ),
@@ -390,15 +448,15 @@ class HoleSelectionDialog extends StatelessWidget {
           actions: [
             TextButton(
               onPressed: () {
-                if (_selectedHoles != null) {
-                  onNext(_selectedHoles!);
+                if (selectedHoles != null) {
+                  onNext(selectedHoles!);
                 } else {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                     content: Text('Please select the number of holes'),
                   ));
                 }
               },
-              child: Text('Next'),
+              child: const Text('Next'),
             ),
           ],
         );
@@ -410,27 +468,27 @@ class HoleSelectionDialog extends StatelessWidget {
 class BetAmountInputDialog extends StatelessWidget {
   final Function(double) onNext;
 
-  BetAmountInputDialog({required this.onNext});
+  const BetAmountInputDialog({super.key, required this.onNext});
 
   @override
   Widget build(BuildContext context) {
-    double? _betAmount;
+    double? betAmount;
 
     return AlertDialog(
-      title: Text('How much to wager?'),
+      title: const Text('How much to wager?'),
       content: TextField(
         keyboardType: TextInputType.number,
         onChanged: (value) {
-          _betAmount = double.tryParse(value) ?? 0.0;
+          betAmount = double.tryParse(value) ?? 0.0;
         },
-        decoration: InputDecoration(labelText: 'Enter Bet Amount'),
+        decoration: const InputDecoration(labelText: 'Enter Bet Amount'),
       ),
       actions: [
         TextButton(
           onPressed: () {
-            onNext(_betAmount ?? 0.0);
+            onNext(betAmount ?? 0.0);
           },
-          child: Text('Next'),
+          child: const Text('Next'),
         ),
       ],
     );
@@ -441,26 +499,26 @@ class AccessCodeDialog extends StatelessWidget {
   final String accessCode;
   final VoidCallback onStartRound;
 
-  AccessCodeDialog({required this.accessCode, required this.onStartRound});
+  const AccessCodeDialog({super.key, required this.accessCode, required this.onStartRound});
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text('Access Code'),
+      title: const Text('Access Code'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('Share this access code with others to join the round:'),
+          const Text('Share this access code with others to join the round:'),
           SelectableText(
             accessCode,
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
           ),
         ],
       ),
       actions: [
         TextButton(
           onPressed: onStartRound,
-          child: Text('Start Round'),
+          child: const Text('Start Round'),
         ),
       ],
     );

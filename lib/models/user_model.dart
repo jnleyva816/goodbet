@@ -5,6 +5,8 @@ class UserModel {
   int handicap;
   double funds;
   String profileImageUrl;
+  String email;
+  List<Map<String, dynamic>> gameHistory;
 
   UserModel({
     required this.uid,
@@ -12,10 +14,10 @@ class UserModel {
     required this.lastName,
     required this.handicap,
     required this.funds,
+    required this.email,
     this.profileImageUrl = '',
+    this.gameHistory = const [], // Initialize with an empty list
   });
-
-  get profilePictureUrl => null;
 
   // Convert a UserModel into a Map
   Map<String, dynamic> toMap() {
@@ -26,6 +28,8 @@ class UserModel {
       'handicap': handicap,
       'funds': funds,
       'profileImageUrl': profileImageUrl,
+      'email': email,
+      'gameHistory': gameHistory,
     };
   }
 
@@ -38,6 +42,8 @@ class UserModel {
       handicap: map['handicap']?.toInt() ?? 0,
       funds: map['funds']?.toDouble() ?? 0.0,
       profileImageUrl: map['profileImageUrl'] ?? '',
+      email: map['email'] ?? '',
+      gameHistory: List<Map<String, dynamic>>.from(map['gameHistory'] ?? []),
     );
   }
 }

@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:goodbet/screens/results_screen.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'results_screen.dart';
+import 'profile_screen.dart';
+import '../models/user_model.dart';
 
 class ScorecardScreen extends StatefulWidget {
   final String roundId;
   final String accessCode;
 
-  ScorecardScreen({required this.roundId, required this.accessCode});
+  const ScorecardScreen({super.key, required this.roundId, required this.accessCode});
 
   @override
   _ScorecardScreenState createState() => _ScorecardScreenState();
@@ -15,7 +18,9 @@ class ScorecardScreen extends StatefulWidget {
 class _ScorecardScreenState extends State<ScorecardScreen> {
   Map<String, Map<int, int>> _scores = {};
   List<String> _playerIds = [];
-  Map<String, String> _playerNames = {};
+  final Map<String, String> _playerNames = {};
+  final Map<String, String> _playerPhotos = {};
+  final Map<String, String> _playerHandicaps = {};
   Map<String, double> _bets = {};
   int _holes = 18;
   double _totalBets = 0.0;
@@ -42,27 +47,84 @@ class _ScorecardScreenState extends State<ScorecardScreen> {
       Map<String, dynamic> betsMap = Map<String, dynamic>.from(roundData['bets'] ?? {});
       double totalBets = roundData['totalBets']?.toDouble() ?? 0.0;
       bool isRoundFinished = roundData['isRoundFinished'] ?? false;
+      Map<String, dynamic> playerNames = roundData['playerNames'] ?? {};
 
       // Convert dynamic bets to double
       betsMap.forEach((key, value) {
         _bets[key] = (value as num).toDouble();
       });
 
-      // Fetch player names
-      for (String playerId in playerIds) {
-        DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(playerId).get();
-        if (userDoc.exists) {
-          _playerNames[playerId] = "${userDoc['firstName']} ${userDoc['lastName']}";
+      // Fetch player names and photos
+      await _fetchPlayerData(playerIds, playerNames);
+
+      if (mounted) {
+        setState(() {
+          _playerIds = playerIds;
+          _holes = roundData['holes'] ?? 18;
+          _scores = {for (var id in playerIds) id: {}};
+          _totalBets = totalBets;
+          _isRoundFinished = isRoundFinished;
+
+          // Populate scores
+          if (roundData['scores'] != null) {
+            (roundData['scores'] as Map<String, dynamic>).forEach((playerId, playerScores) {
+              _scores[playerId] = (playerScores as Map<String, dynamic>).map((hole, score) {
+                return MapEntry(int.parse(hole), (score as num).toInt());
+              });
+            });
+          }
+
+          // Populate highlights
+          _highlightWinners = roundData['highlightWinners'] != null
+              ? (roundData['highlightWinners'] as Map<String, dynamic>).map((hole, playerHighlights) {
+                  return MapEntry(int.parse(hole), (playerHighlights as Map<String, dynamic>).map((playerId, value) {
+                    return MapEntry(playerId, value as bool);
+                  }));
+                })
+              : {};
+          _highlightLosers = roundData['highlightLosers'] != null
+              ? (roundData['highlightLosers'] as Map<String, dynamic>).map((hole, playerHighlights) {
+                  return MapEntry(int.parse(hole), (playerHighlights as Map<String, dynamic>).map((playerId, value) {
+                    return MapEntry(playerId, value as bool);
+                  }));
+                })
+              : {};
+          _highlightTies = roundData['highlightTies'] != null
+              ? (roundData['highlightTies'] as Map<String, dynamic>).map((hole, playerHighlights) {
+                  return MapEntry(int.parse(hole), (playerHighlights as Map<String, dynamic>).map((playerId, value) {
+                    return MapEntry(playerId, value as bool);
+                  }));
+                })
+              : {};
+        });
+      }
+    }
+  }
+
+  Future<void> _fetchPlayerData(List<String> playerIds, Map<String, dynamic> playerNames) async {
+    for (String playerId in playerIds) {
+      if (!_playerNames.containsKey(playerId)) {
+        if (playerNames.containsKey(playerId)) {
+          // Player was manually added
+          if (mounted) {
+            setState(() {
+              _playerNames[playerId] = playerNames[playerId];
+            });
+          }
+        } else {
+          // Player has an account, fetch from users collection
+          DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(playerId).get();
+          if (userDoc.exists) {
+            if (mounted) {
+              setState(() {
+                _playerNames[playerId] = "${userDoc['firstName']} ${userDoc['lastName']}";
+                _playerPhotos[playerId] = userDoc['profileImageUrl'] ?? '';
+                _playerHandicaps[playerId] = userDoc['handicap']?.toString() ?? '';
+              });
+            }
+          }
         }
       }
-
-      setState(() {
-        _playerIds = playerIds;
-        _holes = roundData['holes'] ?? 18;
-        _scores = {for (var id in playerIds) id: {}};
-        _totalBets = totalBets;
-        _isRoundFinished = isRoundFinished;
-      });
     }
   }
 
@@ -77,22 +139,24 @@ class _ScorecardScreenState extends State<ScorecardScreen> {
     try {
       await FirebaseFirestore.instance.collection('rounds').doc(widget.roundId).update({
         'scores': firestoreScores,
-        'highlightWinners': _highlightWinners,
-        'highlightLosers': _highlightLosers,
-        'highlightTies': _highlightTies,
+        'highlightWinners': _highlightWinners.map((key, value) => MapEntry(key.toString(), value)),
+        'highlightLosers': _highlightLosers.map((key, value) => MapEntry(key.toString(), value)),
+        'highlightTies': _highlightTies.map((key, value) => MapEntry(key.toString(), value)),
       });
       // Navigate to ResultsScreen
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => ResultsScreen(
-            scores: _scores,
-            playerNames: _playerNames,
-            holes: _holes,
-            bets: _bets,
+      if (mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ResultsScreen(
+              scores: _scores,
+              playerNames: _playerNames,
+              holes: _holes,
+              bets: _bets,
+            ),
           ),
-        ),
-      );
+        );
+      }
     } catch (e) {
       print('Error updating scores: $e');
     }
@@ -107,22 +171,18 @@ class _ScorecardScreenState extends State<ScorecardScreen> {
       'bets.$newPlayerId': betAmount,
       'scores.$newPlayerId': {},
       'totalBets': FieldValue.increment(betAmount), // Increment total bets
+      'playerNames.$newPlayerId': name, // Store player name in the round document
     });
 
-    // Add player to users collection
-    await FirebaseFirestore.instance.collection('users').doc(newPlayerId).set({
-      'firstName': name.split(' ')[0],
-      'lastName': name.split(' ').length > 1 ? name.split(' ')[1] : '',
-    });
-
-    // Update local state
-    setState(() {
-      _playerNames[newPlayerId] = name;
-      _playerIds.add(newPlayerId);
-      _bets[newPlayerId] = betAmount;
-      _scores[newPlayerId] = {};
-      _totalBets += betAmount;
-    });
+    if (mounted) {
+      setState(() {
+        _playerNames[newPlayerId] = name;
+        _playerIds.add(newPlayerId);
+        _bets[newPlayerId] = betAmount;
+        _scores[newPlayerId] = {};
+        _totalBets += betAmount;
+      });
+    }
   }
 
   void _showAddPlayerDialog() {
@@ -132,18 +192,18 @@ class _ScorecardScreenState extends State<ScorecardScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Add Player'),
+        title: const Text('Add Player'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               onChanged: (value) => name = value,
-              decoration: InputDecoration(labelText: 'Name'),
+              decoration: const InputDecoration(labelText: 'Name'),
             ),
             TextField(
               keyboardType: TextInputType.number,
               onChanged: (value) => betAmount = double.tryParse(value) ?? 0.0,
-              decoration: InputDecoration(labelText: 'Bet Amount'),
+              decoration: const InputDecoration(labelText: 'Bet Amount'),
             ),
           ],
         ),
@@ -153,7 +213,7 @@ class _ScorecardScreenState extends State<ScorecardScreen> {
               _addPlayer(name, betAmount);
               Navigator.of(context).pop();
             },
-            child: Text('Add'),
+            child: const Text('Add'),
           ),
         ],
       ),
@@ -161,19 +221,21 @@ class _ScorecardScreenState extends State<ScorecardScreen> {
   }
 
   void _updateScores(String playerId, int hole, int score) {
-    setState(() {
-      _scores[playerId]?[hole] = score;
-    });
+    if (mounted) {
+      setState(() {
+        _scores[playerId]?[hole] = score;
+      });
 
-    // Update Firestore with new scores
-    FirebaseFirestore.instance.collection('rounds').doc(widget.roundId).update({
-      'scores.$playerId.$hole': score,
-    }).then((_) {
-      print('Score updated in Firestore');
-      _updateHighlights(hole);
-    }).catchError((e) {
-      print('Error updating Firestore: $e');
-    });
+      // Update Firestore with new scores
+      FirebaseFirestore.instance.collection('rounds').doc(widget.roundId).update({
+        'scores.$playerId.$hole': score,
+      }).then((_) {
+        print('Score updated in Firestore');
+        _updateHighlights(hole);
+      }).catchError((e) {
+        print('Error updating Firestore: $e');
+      });
+    }
   }
 
   void _updateHighlights(int hole) {
@@ -189,50 +251,71 @@ class _ScorecardScreenState extends State<ScorecardScreen> {
       }
     }
 
-    setState(() {
-      _highlightWinners[hole] = {};
-      _highlightLosers[hole] = {};
-      _highlightTies[hole] = {};
+    if (mounted) {
+      setState(() {
+        _highlightWinners[hole] = {};
+        _highlightLosers[hole] = {};
+        _highlightTies[hole] = {};
 
-      for (String playerId in _playerIds) {
-        int score = _scores[playerId]?[hole] ?? 0;
-        if (score == minScore && score == maxScore) {
-          _highlightTies[hole]?[playerId] = true;
-        } else if (score == minScore) {
-          _highlightWinners[hole]?[playerId] = true;
-        } else if (score == maxScore) {
-          _highlightLosers[hole]?[playerId] = true;
+        for (String playerId in _playerIds) {
+          int score = _scores[playerId]?[hole] ?? 0;
+          if (score == minScore && score == maxScore) {
+            _highlightTies[hole]?[playerId] = true;
+          } else if (score == minScore) {
+            _highlightWinners[hole]?[playerId] = true;
+          } else if (score == maxScore) {
+            _highlightLosers[hole]?[playerId] = true;
+          }
         }
-      }
-    });
+      });
 
-    // Update Firestore with new highlights
-    FirebaseFirestore.instance.collection('rounds').doc(widget.roundId).update({
-      'highlightWinners': _highlightWinners,
-      'highlightLosers': _highlightLosers,
-      'highlightTies': _highlightTies,
-    }).then((_) {
-      print('Highlights updated in Firestore');
-    }).catchError((e) {
-      print('Error updating highlights in Firestore: $e');
+      // Update Firestore with new highlights
+      FirebaseFirestore.instance.collection('rounds').doc(widget.roundId).update({
+        'highlightWinners': _highlightWinners.map((key, value) => MapEntry(key.toString(), value)),
+        'highlightLosers': _highlightLosers.map((key, value) => MapEntry(key.toString(), value)),
+        'highlightTies': _highlightTies.map((key, value) => MapEntry(key.toString(), value)),
+      }).then((_) {
+        print('Highlights updated in Firestore');
+      }).catchError((e) {
+        print('Error updating highlights in Firestore: $e');
+      });
+    }
+  }
+
+  void _finishRound() async {
+    await FirebaseFirestore.instance.collection('rounds').doc(widget.roundId).update({
+      'isRoundFinished': true,
     });
+    if (mounted) {
+      setState(() {
+        _isRoundFinished = true;
+      });
+    }
   }
 
   Widget _buildScoreInput(String playerId, int hole) {
     int? currentScore = _scores[playerId]?[hole];
-    return DropdownButton<int>(
-      value: currentScore,
-      items: List.generate(10, (i) => i).map((score) {
-        return DropdownMenuItem(
-          value: score,
-          child: Text(score.toString()),
-        );
-      }).toList(),
-      onChanged: (value) {
-        if (value != null) {
-          _updateScores(playerId, hole, value);
-        }
-      },
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4.0),
+      child: DropdownButton<int>(
+        value: currentScore,
+        items: List.generate(10, (i) => i).map((score) {
+          return DropdownMenuItem(
+            value: score,
+            child: Center(child: Text(score.toString())),
+          );
+        }).toList(),
+        onChanged: !_isRoundFinished
+            ? (value) {
+                if (value != null) {
+                  _updateScores(playerId, hole, value);
+                }
+              }
+            : null,
+        underline: Container(),
+        isExpanded: true,
+        icon: Container(), // Remove the dropdown arrow
+      ),
     );
   }
 
@@ -247,13 +330,131 @@ class _ScorecardScreenState extends State<ScorecardScreen> {
     return Colors.transparent;
   }
 
-  void _finishRound() async {
-    await FirebaseFirestore.instance.collection('rounds').doc(widget.roundId).update({
-      'isRoundFinished': true,
-    });
-    setState(() {
-      _isRoundFinished = true;
-    });
+  Widget _buildScoreCard() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.vertical,
+        child: DataTable(
+          columnSpacing: 15.0, // Add space between columns
+          dataRowMinHeight: 100.0, // Set minimum height for rows
+          dataRowMaxHeight: 115.0, // Set maximum height for rows
+          headingRowHeight: 70.0, // Set a taller height for heading row
+          horizontalMargin: 15.0, // Add margin to the left of the table
+          columns: [
+            const DataColumn(
+              label: Padding(
+                padding: EdgeInsets.only(left: 8.0, right: 16.0), // Add padding to the left and right
+                child: Text('Player'),
+              ),
+            ),
+            for (int hole = 1; hole <= _holes; hole++)
+              DataColumn(
+                label: InkWell(
+                  onTap: () => _showHoleInfoDialog(hole),
+                  child: Text('Hole $hole'),
+                ),
+              ),
+          ],
+          rows: [
+            for (String playerId in _playerIds)
+              DataRow(cells: [
+                DataCell(
+                  InkWell(
+                    onTap: () => _showPlayerProfile(playerId),
+                    child: Padding(
+                      padding: const EdgeInsets.all(8.0), // Add padding around player cell
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          CircleAvatar(
+                            radius: 20,
+                            backgroundImage: _playerPhotos[playerId] != null && _playerPhotos[playerId]!.isNotEmpty
+                                ? CachedNetworkImageProvider(_playerPhotos[playerId]!)
+                                : null,
+                            child: _playerPhotos[playerId] == null || _playerPhotos[playerId]!.isEmpty
+                                ? const Icon(Icons.person, size: 20)
+                                : null,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(_playerNames[playerId] ?? playerId),
+                          Text(
+                            _playerHandicaps[playerId] != null ? 'Handicap: ${_playerHandicaps[playerId]}' : '',
+                            style: const TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                for (int hole = 1; hole <= _holes; hole++)
+                  DataCell(
+                    Padding(
+                      padding: const EdgeInsets.all(8.0), // Add padding around hole cell
+                      child: Container(
+                        color: _getCellColor(playerId, hole),
+                        child: _buildScoreInput(playerId, hole),
+                      ),
+                    ),
+                  ),
+              ]),
+          ],
+          dividerThickness: 1.0, // Add lines between the rows
+        ),
+      ),
+    );
+  }
+
+  void _showHoleInfoDialog(int hole) {
+    // Show hole information dialog
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Hole $hole Information'),
+        content: Text('Details about hole $hole...'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showPlayerProfile(String playerId) async {
+    if (_playerNames[playerId] == null) {
+      // This user was manually added
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Player Profile'),
+          content: const Text('This was an added user.'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      );
+    } else {
+      // Fetch the user data
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(playerId).get();
+      if (userDoc.exists) {
+        final user = UserModel.fromMap(userDoc.data() as Map<String, dynamic>);
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ProfileScreen(user: user),
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -267,13 +468,13 @@ class _ScorecardScreenState extends State<ScorecardScreen> {
         stream: _roundStream,
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
-            return Center(child: CircularProgressIndicator());
+            return const Center(child: CircularProgressIndicator());
           }
 
           var roundData = snapshot.data?.data() as Map<String, dynamic>?;
 
           if (roundData == null) {
-            return Center(child: Text('No round data available.'));
+            return const Center(child: Text('No round data available.'));
           }
 
           var players = roundData['players'] as List<dynamic>? ?? [];
@@ -282,6 +483,7 @@ class _ScorecardScreenState extends State<ScorecardScreen> {
           var highlightWinners = roundData['highlightWinners'] as Map<String, dynamic>? ?? {};
           var highlightLosers = roundData['highlightLosers'] as Map<String, dynamic>? ?? {};
           var highlightTies = roundData['highlightTies'] as Map<String, dynamic>? ?? {};
+          var playerNames = roundData['playerNames'] as Map<String, dynamic>? ?? {};
 
           // Update local state with real-time data
           _playerIds = List<String>.from(players);
@@ -290,17 +492,7 @@ class _ScorecardScreenState extends State<ScorecardScreen> {
           _isRoundFinished = roundData['isRoundFinished'] ?? false;
 
           // Fetch player names if not already fetched
-          for (String playerId in _playerIds) {
-            if (!_playerNames.containsKey(playerId)) {
-              FirebaseFirestore.instance.collection('users').doc(playerId).get().then((userDoc) {
-                if (userDoc.exists) {
-                  setState(() {
-                    _playerNames[playerId] = "${userDoc['firstName']} ${userDoc['lastName']}";
-                  });
-                }
-              });
-            }
-          }
+          _fetchPlayerData(_playerIds, playerNames);
 
           // Update scores with real-time data
           _scores = scores.map((playerId, playerScores) {
@@ -328,65 +520,62 @@ class _ScorecardScreenState extends State<ScorecardScreen> {
             }));
           });
 
-          return SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Column(
-              children: [
-                Text(
-                  'Total Bets: \$${_totalBets.toStringAsFixed(2)}',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                Row(
-                  children: [
-                    Container(
-                      width: 120,
-                      child: Center(child: Text('Player')),
-                    ),
-                    for (int hole = 1; hole <= _holes; hole++)
-                      Container(
-                        width: 60,
-                        child: Center(child: Text('Hole $hole')),
-                      ),
-                  ],
-                ),
-                for (String playerId in _playerIds)
-                  Row(
-                    children: [
-                      Container(
-                        width: 120,
-                        child: Center(child: Text(_playerNames[playerId] ?? playerId)),
-                      ),
-                      for (int hole = 1; hole <= _holes; hole++)
-                        Container(
-                          width: 60,
-                          color: _getCellColor(playerId, hole),
-                          child: _buildScoreInput(playerId, hole),
+          return Stack(
+            children: [
+              Column(
+                children: [
+                  Expanded(child: _buildScoreCard()),
+                  Padding(
+                    padding: EdgeInsets.only(bottom: MediaQuery.of(context).size.height * 0.1), // Adjust the bottom padding
+                    child: Align(
+                      alignment: Alignment.bottomRight,
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Text(
+                          'Total Bets: \$${_totalBets.toStringAsFixed(2)}',
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                         ),
-                    ],
+                      ),
+                    ),
                   ),
-              ],
-            ),
+                ],
+              ),
+              Positioned(
+                bottom: 16.0,
+                right: 32.0, // Add padding to the right
+                child: FloatingActionButton(
+                  onPressed: () => _showFloatingMenu(context),
+                  child: const Icon(Icons.menu),
+                ),
+              ),
+            ],
           );
         },
       ),
-      bottomNavigationBar: BottomAppBar(
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            ElevatedButton(
-              onPressed: _submitScores,
-              child: Text('Submit Scores'),
-            ),
-            ElevatedButton(
-              onPressed: _showAddPlayerDialog,
-              child: Text('Add Player'),
-            ),
-            ElevatedButton(
-              onPressed: _finishRound,
-              child: Text('Finish Round'),
-            ),
-          ],
-        ),
+    );
+  }
+
+  void _showFloatingMenu(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Wrap(
+        children: [
+          ListTile(
+            leading: const Icon(Icons.save),
+            title: const Text('Submit Scores'),
+            onTap: _isRoundFinished ? null : _submitScores,
+          ),
+          ListTile(
+            leading: const Icon(Icons.person_add),
+            title: const Text('Add Player'),
+            onTap: _isRoundFinished ? null : _showAddPlayerDialog,
+          ),
+          ListTile(
+            leading: const Icon(Icons.flag),
+            title: const Text('Finish Round'),
+            onTap: _isRoundFinished ? null : _finishRound,
+          ),
+        ],
       ),
     );
   }

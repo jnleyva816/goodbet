@@ -5,6 +5,8 @@ import 'package:intl/intl.dart';
 import 'round_details_screen.dart';
 
 class HistoryScreen extends StatelessWidget {
+  const HistoryScreen({super.key});
+
   @override
   Widget build(BuildContext context) {
     final User? user = FirebaseAuth.instance.currentUser;
@@ -12,10 +14,10 @@ class HistoryScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text("History"),
+        title: const Text("History"),
         actions: [
           IconButton(
-            icon: Icon(Icons.clear),
+            icon: const Icon(Icons.clear),
             onPressed: () {
               _clearHistory(context, userId);
             },
@@ -26,15 +28,15 @@ class HistoryScreen extends StatelessWidget {
         stream: FirebaseFirestore.instance.collection('rounds').snapshots(),
         builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(child: CircularProgressIndicator());
+            return const Center(child: CircularProgressIndicator());
           }
 
           if (snapshot.hasError) {
-            return Center(child: Text("Error fetching data"));
+            return const Center(child: Text("Error fetching data"));
           }
 
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return Center(child: Text("No rounds found"));
+            return const Center(child: Text("No rounds found"));
           }
 
           return ListView.builder(
@@ -50,13 +52,13 @@ class HistoryScreen extends StatelessWidget {
               double totalScore = 0.0;
               if (data['scores'] != null && data['scores'][userId] != null) {
                 Map<String, dynamic> userScores = data['scores'][userId];
-                userScores.values.forEach((score) {
+                for (var score in userScores.values) {
                   totalScore += (score as num).toDouble();
-                });
+                }
               }
 
               return Card(
-                margin: EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+                margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
                 child: ListTile(
                   title: Text("Round on $formattedDate"),
                   subtitle: Text("Total Score: $totalScore - Total Bets: \$${totalBets.toStringAsFixed(2)}"),
@@ -88,7 +90,7 @@ class HistoryScreen extends StatelessWidget {
         await doc.reference.delete();
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('History cleared')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('History cleared')));
     }
   }
 
