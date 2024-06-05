@@ -3,15 +3,18 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:geolocator/geolocator.dart';
+import 'dart:math';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:permission_handler/permission_handler.dart';
 import '../models/user_model.dart';
+import '../models/golf_course_model.dart';
 import '../widgets/bottom_nav_bar.dart';
 import 'history_screen.dart';
 import 'notifications_screen.dart';
 import 'more_screen.dart';
 import 'scorecard_screen.dart';
-import 'dart:math';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -30,6 +33,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _requestPermissions(); // Request location permissions
     _getUserData();
     _setupFCM();
   }
@@ -57,7 +61,7 @@ class _HomeScreenState extends State<HomeScreen> {
       HomeContent(
         currentUser: _currentUser,
         onJoinRound: _showJoinRoundChoiceDialog,
-        onCreateRound: _showHoleSelectionDialog,
+        onCreateRound: _showGolfCourseSelectionDialog,
       ),
       const HistoryScreen(),
       const NotificationsScreen(),
@@ -69,11 +73,49 @@ class _HomeScreenState extends State<HomeScreen> {
   void _setupFCM() {
     _firebaseMessaging.requestPermission();
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      // Handle foreground notifications
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message.notification?.body ?? 'Notification received')),
       );
     });
+  }
+
+  Future<void> _requestPermissions() async {
+    var status = await Permission.location.status;
+    if (status.isDenied || status.isRestricted) {
+      await Permission.location.request();
+    }
+  }
+
+  Future<Position> _getUserLocation() async {
+    return await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+  }
+
+  Future<List<GolfCourse>> fetchClosestGolfCourses(double lat, double lon) async {
+    final String url = "https://zylalabs.com/api/2029/golf+courses+data+api/3595/golf+courses+by+coordinates?radius=10&latitude=$lat&longitude=$lon";
+
+    final headers = {
+      'Authorization': 'Bearer 4619|pvxXfpWCFvqQIuxtzsSRGt5snaU63Bme0I5GOBTX'
+    };
+
+    try {
+      final response = await http.get(Uri.parse(url), headers: headers);
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> jsonResponse = json.decode(response.body);
+
+        if (jsonResponse.containsKey('courses') && jsonResponse['courses'] != null) {
+          List<dynamic> coursesJson = jsonResponse['courses'];
+          return coursesJson.map((course) => GolfCourse.fromJson(course)).toList();
+        } else {
+          throw Exception('No courses found in the response');
+        }
+      } else {
+        throw Exception('Failed to load golf courses');
+      }
+    } catch (e) {
+      print('Error fetching golf courses: $e');
+      throw Exception('Failed to fetch golf courses');
+    }
   }
 
   void _showJoinRoundChoiceDialog() {
@@ -177,12 +219,17 @@ class _HomeScreenState extends State<HomeScreen> {
         final userId = FirebaseAuth.instance.currentUser!.uid;
         final roundData = roundDoc.data();
         final List<dynamic> players = roundData['players'];
+        final courseDetails = roundData['courseDetails'];
 
         if (players.contains(userId)) {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => ScorecardScreen(roundId: roundId, accessCode: accessCode),
+              builder: (context) => ScorecardScreen(
+                roundId: roundId,
+                accessCode: accessCode,
+                courseDetails: courseDetails,
+              ),
             ),
           );
           return;
@@ -199,7 +246,11 @@ class _HomeScreenState extends State<HomeScreen> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => ScorecardScreen(roundId: roundId, accessCode: accessCode),
+            builder: (context) => ScorecardScreen(
+              roundId: roundId,
+              accessCode: accessCode,
+              courseDetails: courseDetails,
+            ),
           ),
         );
       } else {
@@ -256,31 +307,72 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _showHoleSelectionDialog() {
+  void _showGolfCourseSelectionDialog() async {
+    Position position = await _getUserLocation();
+    List<GolfCourse> golfCourses = await fetchClosestGolfCourses(position.latitude, position.longitude);
+
     showDialog(
       context: context,
-      builder: (context) => HoleSelectionDialog(
-        onNext: (int holes) {
+      builder: (context) => GolfCourseSelectionDialog(
+        golfCourses: golfCourses,
+        onNext: (GolfCourse selectedCourse) {
           Navigator.of(context).pop();
-          _showBetAmountInputDialog(holes);
+          _fetchCourseDetails(selectedCourse);
         },
       ),
     );
   }
 
-  void _showBetAmountInputDialog(int holes) {
+  void _fetchCourseDetails(GolfCourse selectedCourse) async {
+    try {
+      final String url = "https://zylalabs.com/api/2029/golf+courses+data+api/5051/course+data+by+course+name?courseName=${Uri.encodeComponent(selectedCourse.name)}";
+
+      final headers = {
+        'Authorization': 'Bearer 4619|pvxXfpWCFvqQIuxtzsSRGt5snaU63Bme0I5GOBTX'
+      };
+
+      final response = await http.get(Uri.parse(url), headers: headers);
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> jsonResponse = json.decode(response.body);
+        final Map<String, dynamic> courseDetails = jsonResponse['data'];
+        final List<dynamic> scorecard = jsonResponse['scorecard'];
+        final List<dynamic> teeBoxes = jsonResponse['teeBoxes'];
+
+        selectedCourse = GolfCourse.fromJson({
+          ...selectedCourse.toJson(),
+          'address': courseDetails['address'] ?? '',
+          'telephone': courseDetails['phone'] ?? '',
+          'website': courseDetails['website'] ?? '',
+          'scorecard': scorecard,
+          'teeBoxes': teeBoxes,
+        });
+
+        _showHoleAndBetAmountInputDialog(selectedCourse);
+      } else {
+        throw Exception('Failed to load course details');
+      }
+    } catch (e) {
+      print('Error fetching course details: $e');
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Error fetching course details: $e'),
+      ));
+    }
+  }
+
+  void _showHoleAndBetAmountInputDialog(GolfCourse selectedCourse) {
     showDialog(
       context: context,
-      builder: (context) => BetAmountInputDialog(
-        onNext: (double betAmount) {
+      builder: (context) => HoleAndBetAmountInputDialog(
+        onNext: (int holes, double betAmount) {
           Navigator.of(context).pop();
-          _generateAccessCode(holes, betAmount);
+          _generateAccessCode(holes, betAmount, selectedCourse);
         },
       ),
     );
   }
 
-  void _generateAccessCode(int holes, double betAmount) {
+  void _generateAccessCode(int holes, double betAmount, GolfCourse selectedCourse) {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     final accessCode = String.fromCharCodes(
       Iterable.generate(5, (_) => chars.codeUnitAt(Random().nextInt(chars.length))),
@@ -292,15 +384,14 @@ class _HomeScreenState extends State<HomeScreen> {
         accessCode: accessCode,
         onStartRound: () {
           Navigator.of(context).pop();
-          _createRound(holes, betAmount, accessCode);
+          _createRound(holes, betAmount, accessCode, selectedCourse);
         },
       ),
     );
   }
 
-  void _createRound(int holes, double betAmount, String accessCode) async {
+  void _createRound(int holes, double betAmount, String accessCode, GolfCourse selectedCourse) async {
     final roundId = FirebaseFirestore.instance.collection('rounds').doc().id;
-
     final userId = FirebaseAuth.instance.currentUser!.uid;
 
     await FirebaseFirestore.instance.collection('rounds').doc(roundId).set({
@@ -311,13 +402,18 @@ class _HomeScreenState extends State<HomeScreen> {
       'bets': {userId: betAmount},
       'scores': {},
       'totalBets': betAmount,
-      'date': DateTime.now().toIso8601String(), // Adding the date
+      'date': DateTime.now().toIso8601String(),
+      'courseDetails': selectedCourse.toJson(),
     });
 
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => ScorecardScreen(roundId: roundId, accessCode: accessCode),
+        builder: (context) => ScorecardScreen(
+          roundId: roundId,
+          accessCode: accessCode,
+          courseDetails: selectedCourse.toJson(),
+        ),
       ),
     );
   }
@@ -337,22 +433,22 @@ class _HomeScreenState extends State<HomeScreen> {
             child: _currentUser == null
                 ? const Center(child: CircularProgressIndicator())
                 : Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: CircleAvatar(
-                    radius: 30,
-                    backgroundImage: _currentUser!.profileImageUrl.isNotEmpty
-                        ? CachedNetworkImageProvider(_currentUser!.profileImageUrl)
-                        : null,
-                    child: _currentUser!.profileImageUrl.isEmpty ? const Icon(Icons.person, size: 30) : null,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: CircleAvatar(
+                          radius: 30,
+                          backgroundImage: _currentUser!.profileImageUrl.isNotEmpty
+                              ? CachedNetworkImageProvider(_currentUser!.profileImageUrl)
+                              : null,
+                          child: _currentUser!.profileImageUrl.isEmpty ? const Icon(Icons.person, size: 30) : null,
+                        ),
+                      ),
+                      Expanded(
+                        child: _pages.isNotEmpty ? _pages[_selectedIndex] : const Center(child: CircularProgressIndicator()),
+                      ),
+                    ],
                   ),
-                ),
-                Expanded(
-                  child: _pages.isNotEmpty ? _pages[_selectedIndex] : const Center(child: CircularProgressIndicator()),
-                ),
-              ],
-            ),
           ),
         ],
       ),
@@ -403,19 +499,87 @@ class HomeContent extends StatelessWidget {
   }
 }
 
-class HoleSelectionDialog extends StatelessWidget {
-  final Function(int) onNext;
+class GolfCourseSelectionDialog extends StatelessWidget {
+  final List<GolfCourse> golfCourses;
+  final Function(GolfCourse) onNext;
 
-  const HoleSelectionDialog({super.key, required this.onNext});
+  const GolfCourseSelectionDialog({super.key, required this.golfCourses, required this.onNext});
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Select Golf Course'),
+      content: SizedBox(
+        height: 400,
+        width: 300,
+        child: ListView.builder(
+          itemCount: golfCourses.length,
+          itemBuilder: (context, index) {
+            final course = golfCourses[index];
+            return ListTile(
+              title: Text(course.name),
+              subtitle: Text('${course.address}, ${course.city}, ${course.state}, ${course.country}\nPhone: ${course.telephone}'),
+              onTap: () {
+                showDialog(
+                  context: context,
+                  builder: (context) => GolfCourseDetailsDialog(
+                    course: course,
+                    onSelect: () {
+                      Navigator.of(context).pop();
+                      onNext(course);
+                    },
+                  ),
+                );
+              },
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class GolfCourseDetailsDialog extends StatelessWidget {
+  final GolfCourse course;
+  final VoidCallback onSelect;
+
+  const GolfCourseDetailsDialog({super.key, required this.course, required this.onSelect});
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(course.name),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('Address: ${course.address}'),
+          Text('Phone: ${course.telephone}'),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: onSelect,
+          child: const Text('Select'),
+        ),
+      ],
+    );
+  }
+}
+
+class HoleAndBetAmountInputDialog extends StatelessWidget {
+  final Function(int, double) onNext;
+
+  const HoleAndBetAmountInputDialog({super.key, required this.onNext});
 
   @override
   Widget build(BuildContext context) {
     int? selectedHoles;
+    double? betAmount;
 
     return StatefulBuilder(
       builder: (context, setState) {
         return AlertDialog(
-          title: const Text('How many holes?'),
+          title: const Text('Round Details'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -443,16 +607,23 @@ class HoleSelectionDialog extends StatelessWidget {
                   },
                 ),
               ),
+              TextField(
+                keyboardType: TextInputType.number,
+                onChanged: (value) {
+                  betAmount = double.tryParse(value) ?? 0.0;
+                },
+                decoration: const InputDecoration(labelText: 'Enter Bet Amount'),
+              ),
             ],
           ),
           actions: [
             TextButton(
               onPressed: () {
-                if (selectedHoles != null) {
-                  onNext(selectedHoles!);
+                if (selectedHoles != null && betAmount != null) {
+                  onNext(selectedHoles!, betAmount!);
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                    content: Text('Please select the number of holes'),
+                    content: Text('Please complete all fields'),
                   ));
                 }
               },
@@ -461,36 +632,6 @@ class HoleSelectionDialog extends StatelessWidget {
           ],
         );
       },
-    );
-  }
-}
-
-class BetAmountInputDialog extends StatelessWidget {
-  final Function(double) onNext;
-
-  const BetAmountInputDialog({super.key, required this.onNext});
-
-  @override
-  Widget build(BuildContext context) {
-    double? betAmount;
-
-    return AlertDialog(
-      title: const Text('How much to wager?'),
-      content: TextField(
-        keyboardType: TextInputType.number,
-        onChanged: (value) {
-          betAmount = double.tryParse(value) ?? 0.0;
-        },
-        decoration: const InputDecoration(labelText: 'Enter Bet Amount'),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () {
-            onNext(betAmount ?? 0.0);
-          },
-          child: const Text('Next'),
-        ),
-      ],
     );
   }
 }

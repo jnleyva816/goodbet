@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart';
 import 'scorecard_screen.dart';
-import 'results_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   final UserModel user;
@@ -33,17 +32,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() {
       _roundHistory = rounds.docs.map((doc) {
         var data = doc.data();
-        data['roundId'] = doc.id;  // Adding roundId to the data
+        data['roundId'] = doc.id; // Adding roundId to the data
         return data;
       }).toList();
     });
   }
 
-  void _viewRoundDetails(String roundId, String accessCode) {
+  void _viewRoundDetails(String roundId, String accessCode, Map<String, dynamic> courseDetails) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => ScorecardScreen(roundId: roundId, accessCode: accessCode),
+        builder: (context) => ScorecardScreen(
+          roundId: roundId,
+          accessCode: accessCode,
+          courseDetails: courseDetails,
+        ),
       ),
     );
   }
@@ -111,7 +114,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       title: Text('Round ${index + 1}'),
                       subtitle: Text('Score: ${round['scores'][_currentUser.uid]}'),
                       trailing: Text(round['winner'] == _currentUser.uid ? 'Won' : 'Lost'),
-                      onTap: () => _viewRoundDetails(round['roundId'], round['accessCode']),
+                      onTap: () => _viewRoundDetails(
+                        round['roundId'],
+                        round['accessCode'],
+                        round['courseDetails'],
+                      ),
                     ),
                   );
                 },

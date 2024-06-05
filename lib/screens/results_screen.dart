@@ -6,7 +6,8 @@ class ResultsScreen extends StatelessWidget {
   final int holes;
   final Map<String, double> bets;
 
-  const ResultsScreen({super.key, 
+  const ResultsScreen({
+    super.key,
     required this.scores,
     required this.playerNames,
     required this.holes,
@@ -86,7 +87,8 @@ class ResultsScreen extends StatelessWidget {
               ElevatedButton(
                 onPressed: () => _distributeBets(context, winnerId),
                 style: ElevatedButton.styleFrom(
-                  foregroundColor: Colors.white, backgroundColor: Theme.of(context).primaryColor,
+                  foregroundColor: Colors.white,
+                  backgroundColor: Theme.of(context).primaryColor,
                 ),
                 child: const Text('Distribute Bets'),
               ),

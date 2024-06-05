@@ -4,12 +4,19 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'results_screen.dart';
 import 'profile_screen.dart';
 import '../models/user_model.dart';
+import '../models/golf_course_model.dart';
 
 class ScorecardScreen extends StatefulWidget {
   final String roundId;
   final String accessCode;
+  final Map<String, dynamic> courseDetails;
 
-  const ScorecardScreen({super.key, required this.roundId, required this.accessCode});
+  const ScorecardScreen({
+    super.key,
+    required this.roundId,
+    required this.accessCode,
+    required this.courseDetails,
+  });
 
   @override
   _ScorecardScreenState createState() => _ScorecardScreenState();
@@ -28,12 +35,14 @@ class _ScorecardScreenState extends State<ScorecardScreen> {
   Map<int, Map<String, bool>> _highlightLosers = {};
   Map<int, Map<String, bool>> _highlightTies = {};
   bool _isRoundFinished = false;
+  late GolfCourse _course;
 
   late Stream<DocumentSnapshot> _roundStream;
 
   @override
   void initState() {
     super.initState();
+    _course = GolfCourse.fromJson(widget.courseDetails);
     _roundStream = FirebaseFirestore.instance.collection('rounds').doc(widget.roundId).snapshots();
     _getRoundData();
   }
@@ -411,7 +420,14 @@ class _ScorecardScreenState extends State<ScorecardScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Hole $hole Information'),
-        content: Text('Details about hole $hole...'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Par: ${_course.scorecard[0]["$hole"]}'),
+            for (var teeBox in _course.teeBoxes)
+              Text('${teeBox["name"]}: ${_course.scorecard[1]["$hole"]} yards'),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () {
